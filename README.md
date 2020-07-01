@@ -1,5 +1,4 @@
 # MiniProjects
-My projects
 
 WebPerformance App (ASP.Net MVC Application) determines sitemap of requested URL, sends requests to sitemap’s URLs and measure response time.
 Tools: BootStrap, JS, MSSQL + EF, Highcharts.com
