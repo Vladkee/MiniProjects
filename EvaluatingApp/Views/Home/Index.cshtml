@@ -1,0 +1,134 @@
+﻿@using System.Data
+@model DataTable
+
+@{
+    ViewBag.Title = "Main Page";
+}
+
+<br />
+<div class="text-body">
+    <form action="/Home/Index"
+          method="post">
+        <label>Please, enter URL address here:</label>
+        <input type="url"
+               name="urlAddress"
+               placeholder="https://example.com" 
+               required="required"/>
+        <input type="number"
+               id="limit"
+               name="linkLimit"
+               value="1"
+               min="1"
+               max="50"
+               placeholder="1-50"
+               required="required">
+        <input type="submit"
+               value="Analyse"
+               />
+    </form>
+    <br />
+</div>
+
+<div>
+    <h4 class="graph-title" style="display:none">Graph Speed Results</h4>
+    <br />
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.highcharts.com/modules/exporting.js"></script>
+    <script src="https://code.highcharts.com/modules/export-data.js"></script>
+    <script src="https://code.highcharts.com/modules/accessibility.js"></script>
+
+    <figure class="highcharts-figure">
+        <div id="container"></div>
+    </figure>
+
+    <script>
+        $(document).ready(function () {
+            $('.evaluated-url').click(function () {
+                let id = $(this).attr("id"), url = $(this).text();
+                $.post("/UrlData/Historical",
+                    {
+                        urlId: id
+                    },
+                    function (data) {
+                        createGraph(data, url);
+                    });
+            });
+            let createGraph = function (data, url) {
+
+                var responseTimes = [];
+                var evaluatedDates = [];
+
+                for (var i = 0; i < data.length; i++) {
+                    responseTimes.push(data[i].response);
+                    evaluatedDates.push(data[i].evaluatedDate);
+
+                    Highcharts.chart('container', {
+                        chart: {
+                            type: 'line'
+                        },
+                        title: {
+                            text: url
+                        },
+                        xAxis: {
+                            categories: evaluatedDates
+                        },
+                        yAxis: {
+                            title: {
+                                text: 'Response Time (s)'
+                            }
+                        },
+                        plotOptions: {
+                            line: {
+                                dataLabels: {
+                                    enabled: true
+                                },
+                                enableMouseTracking: false
+                            }
+                        },
+                        series: [{
+                            name: 'Response Time',
+                            data: responseTimes
+                        }]
+                    });
+                }
+                $(".graph-title").show();
+            };
+        });
+    </script>
+</div>
+<br />
+
+<h4>Table Speed Results</h4>
+<div class="table-active table-info">
+    <table class="table"
+           width="1100">
+        <thead class="thead-dark">
+            <tr>
+                <th scope="col">№</th>
+                <th scope="col">Url</th>
+                <th scope="col">Response Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model == null)
+            {
+                <tr>
+                    <td>No Data</td>
+                </tr>
+            }
+            else
+            {
+                foreach (DataRow dr in Model.Rows)
+                {
+                    <tr>
+                        <td>@dr["№"]</td>
+                        <td class="evaluated-url text-highlight" id="@dr["id"]">@dr["Url"]</td>
+                        <td>@dr["Response Time"]</td>
+                    </tr>
+                }
+
+            }
+        </tbody>
+    </table>
+</div>
+<br />
