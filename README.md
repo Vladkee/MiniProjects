@@ -2,7 +2,7 @@
 My projects
 
 WebPerformance App (ASP.Net MVC Application) determines sitemap of requested URL, sends requests to sitemap’s URLs and measure response time.
-Tools: BootStrap, JS, MSSQL + E, Highcharts.com
+Tools: BootStrap, JS, MSSQL + EF, Highcharts.com
 
 Steps:
 1. Add your URL (in a given format) in input box.
