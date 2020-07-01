@@ -27,6 +27,7 @@ namespace EvaluatingApp.Controllers
         {
             this.webDbContext = new PerformanceDbContext();
         }
+
         public async Task<ActionResult> Index()
         {
             if (HttpContext.Request.HttpMethod == "POST")

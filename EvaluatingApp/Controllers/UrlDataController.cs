@@ -28,7 +28,6 @@ namespace EvaluatingApp.Controllers
                     ["evaluatedDate"] = item.EvaluatedDate.ToString("yyyy/MM/dd") 
                 });
             }
-
             return Json(urlData, JsonRequestBehavior.AllowGet);
         }
     }

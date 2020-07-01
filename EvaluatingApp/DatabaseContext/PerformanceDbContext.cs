@@ -10,6 +10,7 @@ namespace EvaluatingApp.DatabaseContext
     public class PerformanceDbContext : DbContext
     {
         public DbSet<UrlAddress> UrlAdresses { get; set; }
+
         public DbSet<Response> Responses { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
