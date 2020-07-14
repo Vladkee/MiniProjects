@@ -2,6 +2,7 @@
 using EvaluatingApp.Models;
 using HtmlAgilityPack;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -44,20 +45,81 @@ namespace EvaluatingApp.Controllers
         public async Task<DataTable> StartCrawlerAsync(string urlAddress, int linkLimit)
         {
             var httpClient = new HttpClient();
-            var html = await httpClient.GetStringAsync(urlAddress);
+            DataTable urlResponseTable = CreateDataTable();
 
+            var html = await httpClient.GetStringAsync(urlAddress);
             var htmlDocument = new HtmlDocument();
             htmlDocument.LoadHtml(html);
 
             var allLinkList = htmlDocument.DocumentNode.SelectNodes("//a[@href]");
+            List<string> filtredLinks = GetFiltredLinks(allLinkList, urlResponseTable, urlAddress);
 
-            DataTable urlResponseTable = CreateDataTable();
-
-            for (int i = 0; i < allLinkList.Count; i++)
+            if (filtredLinks.Count < linkLimit)
             {
-                HtmlAttribute attribute = allLinkList[i].Attributes["href"];
+                for (int i = 1; i < filtredLinks.Count && urlResponseTable.Rows.Count < linkLimit; i++)
+                {
+                    var anchors = await GetAnchors(filtredLinks[i], httpClient);
 
-                if ((attribute.Value.Contains(urlAddress) || attribute.Value.StartsWith("/")) && urlResponseTable.Rows.Count < linkLimit)
+                    if (anchors != null)
+                    {
+                        var nestedLinks = GetFiltredLinks(anchors, urlResponseTable, urlAddress);
+
+                        for (int nestedIdx = 0; nestedIdx < nestedLinks.Count; nestedIdx++)
+                        {
+                            if (filtredLinks.IndexOf(nestedLinks[nestedIdx]) == -1)
+                            {
+                                filtredLinks.Add(nestedLinks[nestedIdx]);
+                            }
+                        }
+                    }
+                }
+            }
+            StoreLinks(filtredLinks, urlResponseTable, linkLimit);
+
+            //
+            // Sorting.
+            //
+        
+            var sortedView = urlResponseTable.DefaultView;
+            sortedView.Sort = "UrlLength";
+            var sortedTable = sortedView.ToTable();
+
+            for (int i = 0, row = 1; i < sortedTable.Rows.Count; i++, row++)
+            {
+                sortedTable.Rows[i]["№"] = row;
+            }
+            return sortedTable;
+        }
+
+        private async Task<HtmlNodeCollection> GetAnchors(string urlAddress, HttpClient httpClient)
+        {
+            try
+            {
+                if (urlAddress != null && httpClient != null)
+                {
+                    var html = await httpClient.GetStringAsync(urlAddress);
+                    var htmlDocument = new HtmlDocument();
+                    htmlDocument.LoadHtml(html);
+
+                    return htmlDocument.DocumentNode.SelectNodes("//a[@href]");
+                }
+            }
+            catch (HttpRequestException)
+            {
+
+            }
+            return null;
+        }
+
+        private List<string> GetFiltredLinks(HtmlNodeCollection anchors, DataTable dt, string urlAddress)
+        {
+            List<string> filtredLinks = new List<string>();
+
+            for (int i = 0; i < anchors.Count; i++)
+            {
+                HtmlAttribute attribute = anchors[i].Attributes["href"];
+
+                if (attribute.Value.Contains(urlAddress) || attribute.Value.StartsWith("/"))
                 {
                     var urlStr = attribute.Value;
 
@@ -68,53 +130,10 @@ namespace EvaluatingApp.Controllers
                         urlStr = urlAddress + attribute.Value;
                     }
 
-                    var matchedUrl = Regex.Replace(urlStr, urlPattern, "$1");
-
-                    if (urlResponseTable.Select($"Url = '{matchedUrl}'").Length == 0)
-                    {
-                        try
-                        {
-                            var existingUrl = this.webDbContext.UrlAdresses.Where(url => url.urlAddress == matchedUrl).FirstOrDefault();
-
-                            if (existingUrl == null)
-                            {
-                                existingUrl = new UrlAddress(matchedUrl);
-                                this.webDbContext.UrlAdresses.Add(existingUrl).State = EntityState.Added;
-                                this.webDbContext.SaveChanges();
-                            }
-
-                            Response reponseTimeModel = new Response(existingUrl.Id, this.GetResponseTime(matchedUrl));
-                            this.webDbContext.Responses.Add(reponseTimeModel);
-
-                            DataRow row = urlResponseTable.NewRow();
-                            row["Url"] = matchedUrl;
-                            row["Response Time"] = reponseTimeModel.ResponseTime + " s";
-                            row["UrlLength"] = matchedUrl.Length;
-                            row["id"] = existingUrl.Id;
-                            urlResponseTable.Rows.Add(row);
-                        }
-                        catch (WebException)
-                        {
-
-                        }
-                    }
+                    filtredLinks.Add(Regex.Replace(urlStr, urlPattern, "$1"));
                 }
             }
-            //
-            // Sorting.
-            //
-
-            var sortedView = urlResponseTable.DefaultView;
-            sortedView.Sort = "UrlLength";
-            var sortedTable = sortedView.ToTable();
-
-            for (int i = 0, row = 1; i < sortedTable.Rows.Count; i++, row++)
-            {
-                sortedTable.Rows[i]["№"] = row;
-            }
-            this.webDbContext.SaveChanges();
-
-            return sortedTable;
+            return filtredLinks;
         }
 
         private double GetResponseTime(string url)
@@ -166,6 +185,42 @@ namespace EvaluatingApp.Controllers
             urlResponseTable.Columns.Add(responseTime);
 
             return urlResponseTable;
+        }
+
+        private void StoreLinks(List<string> filtredLinks, DataTable dt, int linkLimit)
+        {
+            for (int i = 0; i < filtredLinks.Count && dt.Rows.Count < linkLimit; i++)
+            {
+                if (dt.Select($"Url = '{filtredLinks[i]}'").Length == 0)
+                {
+                    try
+                    {
+                        var existingUrl = this.webDbContext.UrlAdresses.Where(url => url.urlAddress == filtredLinks[i]).FirstOrDefault();
+
+                        if (existingUrl == null)
+                        {
+                            existingUrl = new UrlAddress(filtredLinks[i]);
+                            this.webDbContext.UrlAdresses.Add(existingUrl).State = EntityState.Added;
+                            this.webDbContext.SaveChanges();
+                        }
+
+                        Response reponseTimeModel = new Response(existingUrl.Id, this.GetResponseTime(filtredLinks[i]));
+                        this.webDbContext.Responses.Add(reponseTimeModel);
+
+                        DataRow row = dt.NewRow();
+                        row["Url"] = filtredLinks[i];
+                        row["Response Time"] = reponseTimeModel.ResponseTime + " s";
+                        row["UrlLength"] = filtredLinks[i].Length;
+                        row["id"] = existingUrl.Id;
+                        dt.Rows.Add(row);
+                    }
+                    catch (WebException)
+                    {
+
+                    }
+                }
+            }
+            this.webDbContext.SaveChanges();
         }
     }
 }

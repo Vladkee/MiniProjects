@@ -9,12 +9,15 @@
 <div class="text-body">
     <form action="/Home/Index"
           method="post">
-        <label>Please, enter URL address here:</label>
+        <label>URL:</label>
         <input type="url"
                name="urlAddress"
+               title="The website which you want to evaluate."
                placeholder="https://example.com" 
                required="required"/>
+        <label>Limit:</label>
         <input type="number"
+               title="The value of web links which you want to get."
                id="limit"
                name="linkLimit"
                value="1"
