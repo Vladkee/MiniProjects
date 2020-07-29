@@ -34,15 +34,14 @@ namespace EvaluatingApp.Controllers
             if (HttpContext.Request.HttpMethod == "POST")
             {
                 var urlAddressInputBox = Request.Form["urlAddress"];
-                var linkLimitInputBox = Int32.Parse(Request.Form["linkLimit"]);
-                DataTable dt = await StartCrawlerAsync(urlAddressInputBox, linkLimitInputBox);
+                DataTable dt = await StartCrawlerAsync(urlAddressInputBox);
 
                 return View(dt);
             }
             return View("Index");
         }
 
-        public async Task<DataTable> StartCrawlerAsync(string urlAddress, int linkLimit)
+        public async Task<DataTable> StartCrawlerAsync(string urlAddress)
         {
             var httpClient = new HttpClient();
             DataTable urlResponseTable = CreateDataTable();
@@ -54,32 +53,29 @@ namespace EvaluatingApp.Controllers
             var allLinkList = htmlDocument.DocumentNode.SelectNodes("//a[@href]");
             List<string> filtredLinks = GetFiltredLinks(allLinkList, urlResponseTable, urlAddress);
 
-            if (filtredLinks.Count < linkLimit)
+            for (int i = 1; i < filtredLinks.Count; i++)
             {
-                for (int i = 1; i < filtredLinks.Count && urlResponseTable.Rows.Count < linkLimit; i++)
+                var anchors = await GetAnchors(filtredLinks[i], httpClient);
+
+                if (anchors != null)
                 {
-                    var anchors = await GetAnchors(filtredLinks[i], httpClient);
+                    var nestedLinks = GetFiltredLinks(anchors, urlResponseTable, urlAddress);
 
-                    if (anchors != null)
+                    for (int nestedIdx = 0; nestedIdx < nestedLinks.Count; nestedIdx++)
                     {
-                        var nestedLinks = GetFiltredLinks(anchors, urlResponseTable, urlAddress);
-
-                        for (int nestedIdx = 0; nestedIdx < nestedLinks.Count; nestedIdx++)
+                        if (filtredLinks.IndexOf(nestedLinks[nestedIdx]) == -1)
                         {
-                            if (filtredLinks.IndexOf(nestedLinks[nestedIdx]) == -1)
-                            {
-                                filtredLinks.Add(nestedLinks[nestedIdx]);
-                            }
+                            filtredLinks.Add(nestedLinks[nestedIdx]);
                         }
                     }
                 }
             }
-            StoreLinks(filtredLinks, urlResponseTable, linkLimit);
+            StoreLinks(filtredLinks, urlResponseTable);
 
             //
             // Sorting.
             //
-        
+
             var sortedView = urlResponseTable.DefaultView;
             sortedView.Sort = "UrlLength";
             var sortedTable = sortedView.ToTable();
@@ -129,7 +125,6 @@ namespace EvaluatingApp.Controllers
                     {
                         urlStr = urlAddress + attribute.Value;
                     }
-
                     filtredLinks.Add(Regex.Replace(urlStr, urlPattern, "$1"));
                 }
             }
@@ -148,7 +143,9 @@ namespace EvaluatingApp.Controllers
 
             timer.Stop();
 
-            return timer.Elapsed.TotalSeconds;
+            var responseTime = timer.Elapsed.TotalSeconds;
+
+            return Math.Round(responseTime, 3);
         }
 
         private DataTable CreateDataTable()
@@ -187,9 +184,9 @@ namespace EvaluatingApp.Controllers
             return urlResponseTable;
         }
 
-        private void StoreLinks(List<string> filtredLinks, DataTable dt, int linkLimit)
+        private void StoreLinks(List<string> filtredLinks, DataTable dt)
         {
-            for (int i = 0; i < filtredLinks.Count && dt.Rows.Count < linkLimit; i++)
+            for (int i = 0; i < filtredLinks.Count; i++)
             {
                 if (dt.Select($"Url = '{filtredLinks[i]}'").Length == 0)
                 {
